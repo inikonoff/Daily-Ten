@@ -10,7 +10,6 @@ Daily Ten — промпты (персонаж — Mrs. Smith).
 - SUMMARY_PROMPT — генерация SS + SS4T одним вызовом.
 """
 
-import json
 from typing import Any, Dict, List, Optional
 
 from src.config import SESSION_PAIRS
@@ -104,6 +103,10 @@ In every other case "counts_as_answer" is true.
   "counts_as_answer": true or false,
   "reply": "your message — exactly what the student will see and may hear via text-to-speech. Follows every rule above. Never mentions the mistake."
 }
+
+Example of a good output (the student wrote "I has a dog, he is very lazy"):
+{"category": "grammar", "mistake": "I has a dog", "corrected": "I have a dog", "counts_as_answer": true, "reply": "A lazy dog can change a whole house. I imagine the mornings are slow at yours. Tell me about the moment he surprised you."}
+Note: the reply reacts to the meaning, never mentions the mistake, has no yes/no question, and stays short.
 """
 
 STUDENT_HEADER = "# STUDENT\nName: {name}\nLevel (self-described): {level}"
@@ -165,11 +168,43 @@ _NON_ANSWER_REMINDER = (
 )
 
 
+def _join(items: Any, limit: int) -> str:
+    if not isinstance(items, list):
+        return ""
+    return "; ".join(str(i).strip() for i in items[:limit] if str(i).strip())
+
+
 def format_memory(teacher_summaries: List[Dict[str, Any]]) -> str:
-    """Последние SS4T (новые первыми) в компактном виде для промпта."""
+    """
+    Последние SS4T (новые первыми) в компактном виде для промпта: короткие
+    строки вместо полного JSON-дампа, чтобы не тратить токены (лимиты Groq).
+    """
     notes = []
     for ss in teacher_summaries:
-        notes.append(json.dumps(ss, ensure_ascii=False, separators=(",", ":")))
+        parts = []
+        topics = _join(ss.get("topics"), 4)
+        if topics:
+            parts.append(f"talked about: {topics}")
+        interests = _join(ss.get("interests"), 4)
+        if interests:
+            parts.append(f"interests: {interests}")
+        style = ss.get("answer_style")
+        if isinstance(style, dict) and style.get("brevity"):
+            avg = f", ~{style['avg_words']} words" if style.get("avg_words") else ""
+            parts.append(f"answers: {style['brevity']}{avg}")
+        recurring = [
+            f'"{e.get("phrase", "")}"' for e in (ss.get("errors") or [])
+            if isinstance(e, dict) and e.get("recurring") and e.get("phrase")
+        ]
+        if recurring:
+            parts.append(f"recurring slips (listen, never correct): {', '.join(recurring[:3])}")
+        if ss.get("level_estimate"):
+            parts.append(f"level: {ss['level_estimate']}")
+        pick_up = _join(ss.get("pick_up_next"), 3)
+        if pick_up:
+            parts.append(f"pick up: {pick_up}")
+        if parts:
+            notes.append(" | ".join(parts))
     return "\n".join(f"- {n}" for n in notes)
 
 
@@ -221,3 +256,13 @@ Speak TO them, in second person, in your own warm and honest voice, not a grade 
 Output JSON ONLY, no markdown fences:
 {"user_summary": {...}, "teacher_summary": {...}}
 """
+
+
+# Упрощённый промпт: второй заход, если полный промпт не дал валидный JSON.
+SUMMARY_PROMPT_LITE = """You are Mrs. Smith, an English teacher. A conversation with your student has ended (it may be short). Write a short summary of it as ONE JSON object, nothing else.
+
+{"user_summary": {"voice_script": "60-100 words, warm spoken prose to the student ('you'): what went well, what to work on. No lists, no markdown", "best_moment": "1-2 sentences", "mistakes": [{"was": "...", "correct": "...", "why": "one short line"}], "level_cefr": "A1|A2|B1|B2|C1|C2", "focus": ["1-3 short items"]}, "teacher_summary": {"errors": [{"category": "grammar|vocabulary|prepositions|structure", "phrase": "...", "correction": "...", "recurring": false}], "topics": [], "interests": [], "answer_style": {"brevity": "short|medium|long", "note": ""}, "level_estimate": "B1", "pick_up_next": []}}
+
+At most 5 mistakes. Judge only what was actually said. JSON only, no markdown fences.
+"""
+

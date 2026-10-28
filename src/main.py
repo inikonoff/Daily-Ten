@@ -30,7 +30,14 @@ dp.include_router(admin.router)
 dp.include_router(handlers.router)
 
 
+def validate_settings() -> None:
+    """Понятная ошибка при старте вместо падения на первом сообщении."""
+    if not settings.groq_api_keys_list:
+        raise SystemExit("GROQ_API_KEYS is empty: set at least one Groq API key in the environment")
+
+
 async def main() -> None:
+    validate_settings()
     await db.connect()
     runner = await start_health_server()
     background = asyncio.create_task(background_loop(bot))

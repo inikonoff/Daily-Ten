@@ -4,6 +4,7 @@
 (иначе МС может попрощаться раньше времени), см. PLAN.md.
 """
 
+import re
 from datetime import date, datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -44,3 +45,30 @@ def minsk_date(moment: Optional[datetime] = None) -> date:
 
 def word_count(text: str) -> int:
     return len(text.split())
+
+
+def truncate_message(text: str, limit: int) -> str:
+    """Обрезает слишком длинное сообщение юзера по границе слова (для промпта и истории)."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space >= int(limit * 0.8):
+        cut = cut[:space]
+    return cut.rstrip()
+
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def shorten_reply(text: str, limit: int) -> str:
+    """
+    Сокращает реплику, превысившую лимит слов, не трогая первую (реакция) и
+    последнюю (приглашение продолжить или прощание) фразы: убираются средние
+    предложения. Если фраз две и меньше, текст остаётся как есть.
+    """
+    sentences = _SENTENCE_SPLIT.split(text.strip())
+    while word_count(" ".join(sentences)) > limit and len(sentences) > 2:
+        del sentences[1]
+    return " ".join(sentences)
+

@@ -126,6 +126,10 @@ In every other case "counts_as_answer" is true.
   "counts_as_answer": true or false,
   "reply": "your message — exactly what the student will see and may hear via text-to-speech. Follows every rule above. Never mentions the mistake."
 }
+
+Example of a good output (the student wrote "I has a dog, he is very lazy"):
+{"category": "grammar", "mistake": "I has a dog", "corrected": "I have a dog", "counts_as_answer": true, "reply": "A lazy dog can change a whole house. I imagine the mornings are slow at yours. Tell me about the moment he surprised you."}
+Note: the reply reacts to the meaning, never mentions the mistake, has no yes/no question, and stays short.
 ```
 
 ## Блок режима («THIS TURN»), добавляется кодом
@@ -166,4 +170,5 @@ In every other case "counts_as_answer" is true.
 текст, лучший момент, до 5 ошибок «было → правильно → почему», CEFR,
 над чем работать) и `teacher_summary` (SS4T: ошибки, темы, интересы,
 манера отвечать, уровень, «что подхватить»). Текст — `SUMMARY_PROMPT` в
-`src/prompt.py`. Домашки нет.
+`src/prompt.py`; если полный промпт не даёт валидный JSON, второй заход
+идёт с упрощённым `SUMMARY_PROMPT_LITE`. Домашки нет.

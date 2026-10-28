@@ -20,6 +20,7 @@ from src.config import (
     SS4T_CONTEXT,
     MAX_CONSECUTIVE_NON_ANSWERS,
     MIN_PAIRS_TO_FINISH_EARLY,
+    MAX_USER_MESSAGE_CHARS,
 )
 from src.db import db
 from src.groq_client import groq_client
@@ -37,7 +38,15 @@ from src.keyboards import (
     split_progress_bar,
 )
 from src.prompt import EARLY_USER_MESSAGE
-from src.session import EARLY, OPENING, mode_for_reply, minsk_date, reply_number, word_count
+from src.session import (
+    EARLY,
+    OPENING,
+    minsk_date,
+    mode_for_reply,
+    reply_number,
+    truncate_message,
+    word_count,
+)
 from src.summary import deliver_summary, generating, needs_summary
 
 logger = logging.getLogger(__name__)
@@ -429,6 +438,11 @@ async def _continue_session(
     streak = session["non_answer_streak"]
     force = streak >= MAX_CONSECUTIVE_NON_ANSWERS
 
+    # Длину ответа (метрика диплома) считаем по оригиналу, а в промпт и в
+    # историю идёт обрезанный текст: очень длинное сообщение не раздувает контекст.
+    words = word_count(text)
+    text = truncate_message(text, MAX_USER_MESSAGE_CHARS)
+
     # Режим выбираем до вызова LLM, по предположению «сообщение засчитается».
     prospective_reply_no = reply_number(pairs + 1)
     history = await db.get_session_dialog(session["id"], CONTEXT_MESSAGES)
@@ -453,7 +467,7 @@ async def _continue_session(
 
     await db.save_message(
         user_id, "user", text,
-        session_id=session["id"], counted=counts, word_count=word_count(text),
+        session_id=session["id"], counted=counts, word_count=words,
     )
     if result.get("category") not in (None, "none", "") and result.get("mistake"):
         await db.log_error(

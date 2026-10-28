@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     PORT: int = 10000
 
+    # Модели Groq (смена модели = смена переменной окружения, без правки кода)
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-20b"   # пусто = без запасной модели
+    GROQ_TTS_MODEL: str = "canopylabs/orpheus-v1-english"
+    GROQ_STT_MODEL: str = "whisper-large-v3"
+    ENABLE_TTS: bool = True   # false: голосовые ответы и озвучка Summary отключены, везде текст
+
     class Config:
         env_file = ".env"
         extra = "ignore"
@@ -46,6 +53,13 @@ CONTEXT_MESSAGES = 24            # потолок сообщений текущ�
 
 # ─── Фоновая задача ─────────────────────────────────────────────────────────
 BACKGROUND_INTERVAL_SECONDS = 30 * 60   # поиск брошенных сессий
+BACKGROUND_MAX_BACKOFF_SECONDS = 30 * 60  # потолок паузы при подряд идущих ошибках цикла
+
+# ─── Защита LLM-слоя ────────────────────────────────────────────────────────
+REPLY_WORD_LIMIT = 55            # лимит слов реплики МС (озвучка), см. PERSONA_PROMPT.md
+REPLY_WORD_TOLERANCE = 1.2       # до 55*1.2 слов принимаем как есть, дальше сокращаем
+MAX_USER_MESSAGE_CHARS = 1500    # длиннее — в промпт идёт обрезанный текст
+MIN_SUMMARY_VOICE_WORDS = 40     # короче — голосовое SS считается обрывом (Groq-баг)
 
 # ─── Burst rate-limit (защита от спама) ─────────────────────────────────────
 RATE_LIMIT_WINDOW = 60       # секунд для подсчёта сообщений
