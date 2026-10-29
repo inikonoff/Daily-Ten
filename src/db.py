@@ -311,6 +311,51 @@ class Database:
             )
             return [dict(r) for r in rows]
 
+    # ─── События генерации (наблюдаемость LLM-слоя, см. metrics.py) ─────────
+
+    async def log_generation_event(
+        self,
+        label: str,
+        event: str,
+        model: Optional[str],
+        detail: Optional[str],
+        prompt_chars: Optional[int],
+        raw_snippet: Optional[str],
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO generation_events (label, event, model, detail, prompt_chars, raw_snippet) "
+                "VALUES ($1, $2, $3, $4, $5, $6)",
+                label, event, model, detail, prompt_chars, raw_snippet,
+            )
+
+    async def get_generation_stats(self, hours: int = 24) -> List[Dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT label, event, coalesce(model, '—') AS model, count(*) AS n "
+                "FROM generation_events WHERE created_at >= now() - make_interval(hours => $1) "
+                "GROUP BY label, event, model ORDER BY label, n DESC",
+                hours,
+            )
+            return [dict(r) for r in rows]
+
+    async def get_recent_generation_errors(self, limit: int = 5) -> List[Dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT created_at, label, model, detail FROM generation_events "
+                "WHERE event = 'error' ORDER BY created_at DESC LIMIT $1",
+                limit,
+            )
+            return [dict(r) for r in rows]
+
+    async def delete_old_generation_events(self, days: int) -> int:
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM generation_events WHERE created_at < now() - make_interval(days => $1)",
+                days,
+            )
+            return int(result.split()[-1])
+
     # ─── Админ-панель ────────────────────────────────────────────────────────
 
     async def get_admin_stats(self) -> Dict[str, Any]:

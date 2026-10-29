@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from openai import AsyncOpenAI
 
+from src import metrics
 from src.config import (
     CONTEXT_MESSAGES,
     MIN_SUMMARY_VOICE_WORDS,
@@ -128,6 +129,7 @@ class GroqClient:
         func: Callable[[AsyncOpenAI, Optional[str]], Awaitable[Any]],
         models: Sequence[Optional[str]] = (None,),
         max_attempts: Optional[int] = None,
+        label: str = "groq",
     ):
         """
         Вызывает func(client, model): ротация ключей, при исчерпании попыток на
@@ -149,11 +151,16 @@ class GroqClient:
                     break
                 total += 1
                 try:
-                    return await func(client, model)
+                    result = await func(client, model)
                 except Exception as e:
                     errors.append(f"{model}: {e}")
-                    logger.warning(f"❌ Groq request failed (model={model}, attempt {total}): {e}")
+                    logger.warning(f"❌ Groq request failed ({label}, model={model}, attempt {total}): {e}")
+                    metrics.record(label, "error", model=model, detail=f"{type(e).__name__}: {e}")
                     await asyncio.sleep(0.5 + random.random())
+                    continue
+                if index > 0:
+                    metrics.record(label, "fallback_used", model=model)
+                return result
 
         raise Exception(f"Все Groq клиенты недоступны: {'; '.join(errors[:3])}")
 
@@ -192,6 +199,8 @@ class GroqClient:
                 return validate(data) if validate else data
             except ValueError as e:
                 last_error = e
+                metrics.record(label, "bad_json", model=model, detail=str(e),
+                               prompt_chars=prompt_chars, raw=raw)
                 logger.warning(
                     f"⚠️ {label}: model={model} temp={temperature} prompt_chars={prompt_chars} "
                     f"error={e} raw={(raw or '')[:RAW_LOG_CHARS]!r}"
@@ -256,7 +265,9 @@ class GroqClient:
             )
 
         try:
-            result = await self._make_request(_chat, models=self._models(), max_attempts=4)
+            result = await self._make_request(
+                _chat, models=self._models(), max_attempts=4, label="generate_reply"
+            )
         except Exception as e:
             logger.error(f"❌ Ошибка generate_reply: {e}")
             return None
@@ -268,6 +279,8 @@ class GroqClient:
                 f"⚠️ generate_reply: reply too long ({word_count(reply)} words), "
                 f"shortened to {word_count(shortened)}"
             )
+            metrics.record("generate_reply", "reply_shortened",
+                           detail=f"{word_count(reply)} -> {word_count(shortened)} words")
             reply = shortened
         result["reply"] = reply
         result["counts_as_answer"] = (
@@ -339,17 +352,19 @@ class GroqClient:
                 return await self._chat_json(
                     client, model,
                     [{"role": "system", "content": prompt}, {"role": "user", "content": user_content}],
-                    max_tokens=2500, label="generate_session_summary", temps=temps, validate=_validate,
+                    max_tokens=2500, label="summary", temps=temps, validate=_validate,
                 )
 
             return await self._make_request(
-                _summary, models=models or self._models(), max_attempts=max_attempts
+                _summary, models=models or self._models(), max_attempts=max_attempts, label="summary"
             )
 
         result = None
         for prompt, label, attempts in ((SUMMARY_PROMPT, "full", 3), (SUMMARY_PROMPT_LITE, "lite", 2)):
             try:
                 result = await _run(prompt, (0.5, 0.0), attempts)
+                if label == "lite":
+                    metrics.record("summary", "lite_prompt")
                 break
             except Exception as e:
                 logger.error(f"❌ Ошибка generate_session_summary ({label} prompt): {e}")
@@ -359,12 +374,14 @@ class GroqClient:
         voice = result["user_summary"]["voice_script"]
         if word_count(voice) < MIN_SUMMARY_VOICE_WORDS:
             logger.warning(f"⚠️ SUMMARY_SHORT_VOICE: voice_script has {word_count(voice)} words")
+            metrics.record("summary", "short_voice", detail=f"{word_count(voice)} words")
             try:
                 result = await _run(
                     SUMMARY_PROMPT, (0.0,), 1, require_voice=True, models=self._models()[:1]
                 )
             except Exception as e:
                 logger.warning(f"⚠️ SUMMARY_SHORT_VOICE retry failed, sending card only: {e}")
+                metrics.record("summary", "voice_dropped")
                 result["user_summary"]["voice_script"] = ""
         return result
 
@@ -392,7 +409,7 @@ class GroqClient:
             return self._extract_text(response, "translate_text")
 
         try:
-            return await self._make_request(_translate, models=self._light_models())
+            return await self._make_request(_translate, models=self._light_models(), label="translate")
         except Exception as e:
             logger.error(f"❌ Ошибка перевода: {e}")
             return "Translation failed."
@@ -411,7 +428,7 @@ class GroqClient:
             return response
 
         try:
-            result = await self._make_request(_transcribe)
+            result = await self._make_request(_transcribe, label="stt")
             text = result if isinstance(result, str) else getattr(result, "text", str(result))
             return text.strip()
         except Exception as e:
@@ -438,10 +455,13 @@ class GroqClient:
             return bytes(response)
 
         try:
-            return await self._make_request(_tts)
+            audio = await self._make_request(_tts, label="tts")
         except Exception as e:
             logger.error(f"❌ Ошибка TTS: {e}")
+            metrics.record("tts", "tts_fail", model=settings.GROQ_TTS_MODEL, detail=str(e))
             return None
+        metrics.record("tts", "tts_ok", model=settings.GROQ_TTS_MODEL)
+        return audio
 
 
 groq_client = GroqClient(settings.groq_api_keys_list)

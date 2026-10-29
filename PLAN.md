@@ -260,7 +260,8 @@ daily-ten/
 │   ├── 001_init.sql
 │   ├── 002_sessions.sql
 │   ├── 003_rls.sql  # RLS без политик (Supabase Data API)
-│   └── 004_early_finish.sql  # completion_reason = 'early'
+│   ├── 004_early_finish.sql  # completion_reason = 'early'
+│   └── 005_generation_events.sql  # наблюдаемость LLM-слоя
 └── src/
     ├── main.py          # Bot/Dispatcher, health-сервер, фоновая задача, polling
     ├── health_server.py # /health (без БД), /health/db
@@ -270,6 +271,7 @@ daily-ten/
     ├── db.py            # asyncpg, users/sessions/messages/error_logs
     ├── groq_client.py   # ответ (JSON), SS+SS4T, TTS, Whisper, think-leak guard
     ├── summary.py       # генерация и доставка SS (общая для handlers и фона)
+    ├── metrics.py       # события генерации → generation_events
     ├── background.py    # цикл закрытия брошенных сессий
     ├── keyboards.py     # кнопки, формат полоски прогресса
     ├── handlers.py      # /start, /ten, /summary, машина состояний сессии
@@ -335,6 +337,20 @@ tests/                   # pytest: unit + сценарии сессии на Pos
 метрика «ошибки за 24 ч» в админке; детальный `/health/db`
 (размер пула, последний успешный запрос); пагинация админки при росте
 данных; уведомление админа о падении TTS.
+
+## Рекомендации от 2026-10-29: что сделано
+
+Источник: `Daily-Ten-Recommendations.md`.
+
+| Рекомендация | Решение |
+|---|---|
+| 1. Снизить `CONTEXT_MESSAGES` до 10–12, компактный SS4T | Компактный SS4T уже был (2026-10-28). `CONTEXT_MESSAGES` и `SS4T_CONTEXT` теперь в env; по умолчанию 24 (вся сессия, ТЗ §5). Замер: к последнему ходу системный промпт ~1,5k токенов, история ~1k; урезание до 12 сообщений экономит ~400 токенов только на поздних ходах, поэтому «P0» не подтвердилось |
+| 2. Наблюдаемость ошибок моделей | Сделано: таблица `generation_events` (миграция 005), `src/metrics.py` (запись в фоне, не тормозит ответ), блок «⚠️ Generation (24h)» в админке, чистка старше 30 дней |
+| 3. 20b основной моделью | Решать по данным блока Generation после запуска; инструкция в README |
+| 4. Упростить early finish и режимы | Не меняем: отдельного вызова прощания нет (тот же `generate_reply` с режимом `early`, прощание по ТЗ пишет модель); режимы выбирает код намеренно. Сделано: лог `non_answer` / `forced_answer` |
+| 5. TTS | Сделано: события `tts_ok` / `tts_fail` и доля успехов в админке; `ENABLE_TTS=false` описан в README |
+| 6. Тесты и CI | Сделано: тесты повтора `_chat_json` (think-leak + плохой JSON), перехода на LITE, короткого голосового, сокращения реплики, событий; GitHub Actions с Postgres |
+| 7. Мелочи | Пример JSON в промпте и раздел о смене модели уже были; персистентность `generating` и логи пула не делаем до появления реальных проблем |
 
 ## Допущения (дефолты, не обсуждались, можно оспорить)
 

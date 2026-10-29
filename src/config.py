@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     GROQ_STT_MODEL: str = "whisper-large-v3"
     ENABLE_TTS: bool = True   # false: голосовые ответы и озвучка Summary отключены, везде текст
 
+    # Объём контекста в промпте МС (можно крутить без правки кода, см. README)
+    CONTEXT_MESSAGES: int = 24  # сообщений текущей сессии; 24 = вся сессия (ТЗ §5)
+    SS4T_CONTEXT: int = 3       # сколько последних SS4T (компактно) идёт в промпт
+
     class Config:
         env_file = ".env"
         extra = "ignore"
@@ -48,8 +52,9 @@ SESSION_TIMEOUT_HOURS = 48       # без активности → сессия 
 MIN_PAIRS_FOR_TIMEOUT_SUMMARY = 3
 MIN_PAIRS_TO_FINISH_EARLY = 3   # раньше кнопка «Finish» не показывается, /finish отказывает
 MAX_CONSECUTIVE_NON_ANSWERS = 2  # потом следующее сообщение считается ответом
-SS4T_CONTEXT = 3                 # сколько последних SS4T идёт в промпт МС
-CONTEXT_MESSAGES = 24            # потолок сообщений текущей сессии в промпте (~22 + запас)
+SS4T_CONTEXT = settings.SS4T_CONTEXT          # env SS4T_CONTEXT, по умолчанию 3
+CONTEXT_MESSAGES = settings.CONTEXT_MESSAGES  # env CONTEXT_MESSAGES, по умолчанию 24 (вся сессия)
+GENERATION_EVENTS_RETENTION_DAYS = 30
 
 # ─── Фоновая задача ─────────────────────────────────────────────────────────
 BACKGROUND_INTERVAL_SECONDS = 30 * 60   # поиск брошенных сессий

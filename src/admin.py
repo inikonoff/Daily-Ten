@@ -87,6 +87,44 @@ async def cq_admin_sessions(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "admin_generation")
+async def cq_admin_generation(callback: CallbackQuery):
+    """События LLM-слоя за сутки: ошибки, запасная модель, сокращения, не-ответы, TTS."""
+    if not _is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    rows = await db.get_generation_stats(hours=24)
+    if rows:
+        body = "\n".join(
+            f"  {html.escape(r['label'])} / {html.escape(r['event'])} ({html.escape(r['model'])}): {r['n']}"
+            for r in rows
+        )
+    else:
+        body = "  (no events)"
+
+    tts = {r["event"]: r["n"] for r in rows if r["label"] == "tts"}
+    tts_total = tts.get("tts_ok", 0) + tts.get("tts_fail", 0)
+    tts_line = (
+        f"TTS success: {100 * tts.get('tts_ok', 0) / tts_total:.0f}% of {tts_total}"
+        if tts_total else "TTS success: n/a"
+    )
+
+    recent = await db.get_recent_generation_errors(limit=3)
+    recent_lines = "\n".join(
+        f"  • {r['created_at']:%H:%M} {html.escape(r['label'])} "
+        f"{html.escape(r['model'] or '—')}: {html.escape((r['detail'] or '')[:120])}"
+        for r in recent
+    ) or "  (none)"
+
+    text = (
+        "⚠️ <b>Generation, last 24h</b>\n\n"
+        f"{body}\n\n{tts_line}\n\n"
+        f"Latest errors:\n{recent_lines}"
+    )
+    await callback.message.edit_text(text[:4096], parse_mode="HTML", reply_markup=get_admin_back_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin_errors")
 async def cq_admin_errors(callback: CallbackQuery):
     if not _is_admin(callback.from_user.id):

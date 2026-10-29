@@ -47,6 +47,7 @@ from src.session import (
     truncate_message,
     word_count,
 )
+from src import metrics
 from src.summary import deliver_summary, generating, needs_summary
 
 logger = logging.getLogger(__name__)
@@ -464,6 +465,10 @@ async def _continue_session(
         return None
 
     counts = True if force else result["counts_as_answer"]
+    if not result["counts_as_answer"]:
+        # Видно, как часто модель считает сообщение не-ответом и как часто срабатывает потолок.
+        metrics.record("generate_reply", "forced_answer" if force else "non_answer",
+                       detail=f"session {session['id']}, pairs {pairs}")
 
     await db.save_message(
         user_id, "user", text,

@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from src.config import settings
 from src.db import db
-from src import handlers, admin
+from src import handlers, admin, metrics
 from src.background import background_loop
 from src.health_server import start_health_server
 
@@ -49,6 +49,7 @@ async def main() -> None:
         with contextlib.suppress(asyncio.CancelledError):
             await background
         await runner.cleanup()
+        await metrics.flush()
         await db.close()
         await bot.session.close()
 

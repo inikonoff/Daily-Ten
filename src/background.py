@@ -13,6 +13,7 @@ from aiogram import Bot
 from src.config import (
     BACKGROUND_INTERVAL_SECONDS,
     BACKGROUND_MAX_BACKOFF_SECONDS,
+    GENERATION_EVENTS_RETENTION_DAYS,
     MIN_PAIRS_FOR_TIMEOUT_SUMMARY,
     SESSION_TIMEOUT_HOURS,
 )
@@ -43,6 +44,9 @@ async def close_stale_sessions_once(bot: Bot) -> int:
             logger.error(f"❌ Timeout summary failed for session {session['id']}: {e}")
     if closed:
         logger.info(f"⏱ Background pass: closed {len(closed)} session(s), summaries delivered: {delivered}")
+    removed = await db.delete_old_generation_events(GENERATION_EVENTS_RETENTION_DAYS)
+    if removed:
+        logger.info(f"🧹 Removed {removed} generation event(s) older than {GENERATION_EVENTS_RETENTION_DAYS} days")
     return len(closed)
 
 

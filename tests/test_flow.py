@@ -22,7 +22,7 @@ if not TEST_URL:
     pytest.skip("TEST_DATABASE_URL is not set", allow_module_level=True)
 assert "test" in urlparse(TEST_URL).path.lower(), "TEST_DATABASE_URL must point to a database with 'test' in its name"
 
-from src import handlers, summary, background  # noqa: E402
+from src import handlers, metrics, summary, background  # noqa: E402
 from src import keyboards as kbm  # noqa: E402
 from src.config import MAX_USER_MESSAGE_CHARS  # noqa: E402
 from src.db import db  # noqa: E402
@@ -127,7 +127,7 @@ async def world(monkeypatch):
     try:
         for path in MIGRATIONS:
             await conn.execute(path.read_text(encoding="utf-8"))
-        await conn.execute("TRUNCATE users CASCADE")
+        await conn.execute("TRUNCATE users, generation_events CASCADE")
     finally:
         await conn.close()
     await db.connect()
@@ -139,6 +139,7 @@ async def world(monkeypatch):
         yield w
     finally:
         summary.generating.clear()
+        await metrics.flush()
         await db.close()
 
 
@@ -353,3 +354,21 @@ def test_admin_queries_run(monkeypatch):
         await db.get_error_category_breakdown()
 
     run(scenario, monkeypatch)
+
+
+def test_generation_events_are_stored_and_aggregated(monkeypatch):
+    async def scenario(w):
+        await say(w, None)
+        w.next_counts[:] = [False]
+        await say(w, "what does X mean?")  # не-ответ пишется событием
+        metrics.record("tts", "tts_ok", model="m")
+        metrics.record("tts", "tts_fail", model="m", detail="limit")
+        await metrics.flush()
+        stats = {(r["label"], r["event"]): r["n"] for r in await db.get_generation_stats(24)}
+        assert stats[("generate_reply", "non_answer")] == 1
+        assert stats[("tts", "tts_ok")] == 1 and stats[("tts", "tts_fail")] == 1
+        await backdate("update generation_events set created_at = now() - interval '40 days' where event = 'tts_ok'")
+        assert await db.delete_old_generation_events(30) == 1
+
+    run(scenario, monkeypatch)
+
