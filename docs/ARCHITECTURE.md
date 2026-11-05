@@ -14,7 +14,26 @@
 [11. Фоновая задача](#11-фоновая-задача) · [12. Развёртывание](#12-развёртывание) ·
 [13. Решения](#13-ключевые-решения-и-компромиссы) · [14. Устойчивость](#14-устойчивость-к-сбоям) ·
 [15. Ограничения](#15-ограничения) · [16. Вопросы на защите](#16-вопросы-для-защиты) ·
-[17. Карта кода](#17-карта-кода)
+[17. Карта кода](#17-карта-кода) ·
+[Схемы как изображения](#схемы-как-изображения)
+
+## Схемы как изображения
+
+Готовые PNG (белый фон, высокое разрешение) лежат в
+[`docs/diagrams/`](diagrams/) и нумеруются в порядке схем этого документа:
+`01-components`, `02-message-sequence`, `03-dispatcher`,
+`04-session-lifecycle`, `05-llm-resilience`, `06-speech-recognition`,
+`07-er-diagram`, `08-summary-memory`, `09-deployment`. Источником остаётся
+Mermaid-код в этом файле: если схема меняется, PNG нужно пересобрать:
+
+```bash
+python docs/render_diagrams.py
+```
+
+Скрипту нужен Node.js (используется `npx @mermaid-js/mermaid-cli`).
+Настройки отрисовки лежат в `docs/diagrams/mermaid-config.json`. На
+сервере без графической среды можно указать конфиг Chromium для
+Puppeteer: `python docs/render_diagrams.py --puppeteer-config pp.json`.
 
 ## 1. Назначение и границы
 
@@ -191,21 +210,27 @@ stateDiagram-v2
 устойчивости обслуживает ответы МС и Summary.
 
 ```mermaid
-flowchart TD
-    CALL["Вызов LLM"] --> KEY["Ротация ключей Groq"]
-    KEY --> MODEL{"Основная модель<br/>gpt-oss-20b ответила?"}
-    MODEL -- "ошибка API" --> RETRY["Повтор на другом ключе"]
-    RETRY -->|"попытки исчерпаны"| FB["Запасная модель<br/>gpt-oss-120b"]
-    MODEL -- ответила --> PARSE{"Разбор JSON<br/>(чистый, в блоке ```,<br/>с лишним текстом, think-leak)"}
-    FB --> PARSE
-    PARSE -- "не разобрался" --> T0["Повтор с temperature = 0<br/>и пометкой об отклонении"]
-    T0 --> PARSE2{"Разобрался?"}
-    PARSE2 -- нет --> FAIL["Ошибка: состояние<br/>не меняется, юзер повторяет"]
-    PARSE -- да --> LEN{"Реплика длиннее<br/>лимита слов?"}
-    PARSE2 -- да --> LEN
-    LEN -- да --> SHORT["Убрать средние фразы,<br/>оставить первую и последнюю"]
-    LEN -- нет --> OK["Результат"]
-    SHORT --> OK
+flowchart TB
+    subgraph REQ["1. Запрос к модели"]
+        direction LR
+        KEY["Ключ Groq<br/>(ротация)"] --> M1["Основная модель<br/>gpt-oss-20b"]
+        M1 -- "ошибка API:<br/>повтор на другом ключе" --> KEY
+        M1 -- "попытки исчерпаны" --> M2["Запасная модель<br/>gpt-oss-120b"]
+    end
+    subgraph PARSE["2. Разбор ответа"]
+        direction LR
+        P1["Разбор JSON<br/>(чистый, в блоке, с лишним<br/>текстом, think-leak)"] -- "не разобрался" --> T0["Повтор с temperature = 0<br/>и пометкой об отклонении"]
+        T0 --> P2{"Разобрался?"}
+        P2 -- нет --> FAIL["Ошибка: состояние<br/>не меняется, юзер повторяет"]
+    end
+    subgraph CHECK["3. Проверка реплики"]
+        direction LR
+        LEN{"Длиннее<br/>лимита слов?"} -- да --> SHORT["Убрать средние фразы,<br/>оставить первую и последнюю"]
+        SHORT --> OK["Результат"]
+        LEN -- нет --> OK
+    end
+    REQ -- "ответ получен" --> PARSE
+    PARSE -- "JSON получен" --> CHECK
 ```
 
 Каждое значимое событие (`bad_json`, `error`, `fallback_used`,
@@ -223,17 +248,16 @@ flowchart TD
 `app_settings`.
 
 ```mermaid
-flowchart TD
-    V["Голосовое юзера<br/>OGG/Opus"] --> MODE{"Режим"}
+flowchart TB
+    V["Голосовое юзера<br/>OGG/Opus"] --> MODE(["Какой режим?"])
     MODE -- "Whisper only" --> W["Whisper на Groq<br/>whisper-large-v3-turbo"]
-    MODE -- "Auto или Google only" --> LONG{"Длиннее 55 секунд?"}
-    LONG -- да --> W
-    LONG -- нет --> FF["ffmpeg: OGG в PCM 16 кГц"]
-    FF --> GO["Google Speech<br/>через SpeechRecognition"]
-    GO -- успех --> TXT["Текст"]
-    GO -- "сбой, блокировка,<br/>пустой результат" --> FALL{"Режим Auto?"}
-    FALL -- да --> W
-    FALL -- "нет (Google only)" --> NONE["Нет текста:<br/>«не расслышала»"]
+    MODE -- "Auto или Google only" --> LONG(["Запись до 55 с?"])
+    LONG -- "нет" --> W
+    LONG -- "да" --> GO["ffmpeg и Google Speech<br/>(OGG в PCM, затем распознавание)"]
+    GO -- "успех" --> TXT["Текст"]
+    GO -- "сбой, блокировка,<br/>пустой результат" --> FALL(["Режим Auto?"])
+    FALL -- "да" --> W
+    FALL -- "нет" --> NONE["Нет текста:<br/>«не расслышала»"]
     W --> TXT
 ```
 
