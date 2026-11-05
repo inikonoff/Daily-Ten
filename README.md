@@ -5,7 +5,8 @@ Telegram-бот: каждый день один разговор с учител
 с разбором английского). В разговоре коррекции нет: ошибки собираются молча
 и разбираются только в Summary. Следующие сессии МС строит на памяти о
 прошлых. Решения и обоснование — в [`PLAN.md`](PLAN.md) и
-[`PERSONA_PROMPT.md`](PERSONA_PROMPT.md).
+[`PERSONA_PROMPT.md`](PERSONA_PROMPT.md), устройство системы со схемами — в
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Как это работает
 
