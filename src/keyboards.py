@@ -118,6 +118,26 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
     builder.row(InlineKeyboardButton(text="🔟 Sessions", callback_data="admin_sessions"))
     builder.row(InlineKeyboardButton(text="⚠️ Generation (24h)", callback_data="admin_generation"))
     builder.row(InlineKeyboardButton(text="👥 Users", callback_data="admin_users_0"))
+    builder.row(InlineKeyboardButton(text="⚙️ Settings", callback_data="admin_settings"))
+    return builder.as_markup()
+
+
+def get_admin_settings_keyboard(stt_mode: str, tts_enabled: bool) -> InlineKeyboardMarkup:
+    """Экран настроек: режим распознавания речи (текущий отмечен ✅) и озвучка."""
+    labels = (
+        ("auto", "Auto: Google → Whisper"),
+        ("google", "Google only"),
+        ("groq", "Whisper only"),
+    )
+    builder = InlineKeyboardBuilder()
+    for mode, label in labels:
+        mark = "✅ " if mode == stt_mode else ""
+        builder.row(InlineKeyboardButton(text=f"{mark}{label}", callback_data=f"admin_set_stt_{mode}"))
+    builder.row(InlineKeyboardButton(
+        text="🔊 Voice replies: ON (tap to turn off)" if tts_enabled else "🔇 Voice replies: OFF (tap to turn on)",
+        callback_data=f"admin_set_tts_{'off' if tts_enabled else 'on'}",
+    ))
+    builder.row(InlineKeyboardButton(text="« Back", callback_data="admin_back"))
     return builder.as_markup()
 
 

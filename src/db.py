@@ -311,6 +311,22 @@ class Database:
             )
             return [dict(r) for r in rows]
 
+    # ─── Настройки, меняемые из админки (app_settings) ──────────────────────
+
+    async def get_app_settings(self) -> Dict[str, str]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT key, value FROM app_settings")
+            return {r["key"]: r["value"] for r in rows}
+
+    async def set_app_setting(self, key: str, value: str, updated_by: Optional[int] = None) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO app_settings (key, value, updated_by) VALUES ($1, $2, $3) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "
+                "updated_at = now(), updated_by = EXCLUDED.updated_by",
+                key, value, updated_by,
+            )
+
     # ─── События генерации (наблюдаемость LLM-слоя, см. metrics.py) ─────────
 
     async def log_generation_event(

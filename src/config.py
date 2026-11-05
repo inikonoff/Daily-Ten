@@ -10,11 +10,15 @@ class Settings(BaseSettings):
     PORT: int = 10000
 
     # Модели Groq (смена модели = смена переменной окружения, без правки кода)
-    GROQ_MODEL: str = "openai/gpt-oss-120b"
-    GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-20b"   # пусто = без запасной модели
+    # По умолчанию дешёвые модели (экономия, пока бот бесплатный); тяжёлая 120b — запасная.
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-120b"  # пусто = без запасной модели
+    GROQ_MODEL_LIGHT: str = "openai/gpt-oss-20b"      # простые задачи (перевод)
     GROQ_TTS_MODEL: str = "canopylabs/orpheus-v1-english"
-    GROQ_STT_MODEL: str = "whisper-large-v3"
+    GROQ_STT_MODEL: str = "whisper-large-v3-turbo"
+    # Значения по умолчанию для настроек, которые админ переключает в боте (/admin → Settings):
     ENABLE_TTS: bool = True   # false: голосовые ответы и озвучка Summary отключены, везде текст
+    STT_PROVIDER: str = "auto"  # auto = сначала Google, при неудаче Whisper; google; groq
 
     # Объём контекста в промпте МС (можно крутить без правки кода, см. README)
     CONTEXT_MESSAGES: int = 24  # сообщений текущей сессии; 24 = вся сессия (ТЗ §5)
@@ -65,6 +69,12 @@ REPLY_WORD_LIMIT = 55            # лимит слов реплики МС (оз
 REPLY_WORD_TOLERANCE = 1.2       # до 55*1.2 слов принимаем как есть, дальше сокращаем
 MAX_USER_MESSAGE_CHARS = 1500    # длиннее — в промпт идёт обрезанный текст
 MIN_SUMMARY_VOICE_WORDS = 40     # короче — голосовое SS считается обрывом (Groq-баг)
+
+# ─── Распознавание речи ─────────────────────────────────────────────────────
+GOOGLE_STT_MAX_SECONDS = 55      # дольше Google не принимает: такие голосовые идут в Whisper
+GOOGLE_STT_TIMEOUT_SECONDS = 10
+FFMPEG_TIMEOUT_SECONDS = 20
+SETTINGS_CACHE_SECONDS = 30      # как долго настройки из БД кэшируются в памяти
 
 # ─── Burst rate-limit (защита от спама) ─────────────────────────────────────
 RATE_LIMIT_WINDOW = 60       # секунд для подсчёта сообщений

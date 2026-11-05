@@ -47,7 +47,7 @@ from src.session import (
     truncate_message,
     word_count,
 )
-from src import metrics
+from src import metrics, stt
 from src.summary import deliver_summary, generating, needs_summary
 
 logger = logging.getLogger(__name__)
@@ -581,7 +581,7 @@ async def handle_voice(message: Message, state: FSMContext, bot: Bot):
         return
     file = await bot.get_file(message.voice.file_id)
     audio_bytes = (await bot.download_file(file.file_path)).read()
-    text = await groq_client.transcribe_audio(audio_bytes)
+    text = await stt.transcribe(audio_bytes, duration=message.voice.duration)
     if not text:
         await message.answer("I couldn't quite hear that — mind trying again?")
         return

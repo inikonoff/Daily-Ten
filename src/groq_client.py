@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from openai import AsyncOpenAI
 
-from src import metrics
+from src import metrics, runtime_settings
 from src.config import (
     CONTEXT_MESSAGES,
     MIN_SUMMARY_VOICE_WORDS,
@@ -98,21 +98,23 @@ class GroqClient:
     # ─── Модели ──────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _models() -> List[str]:
-        """Основная модель, затем запасная (если задана и отличается)."""
-        models = [settings.GROQ_MODEL]
-        fallback = settings.GROQ_MODEL_FALLBACK.strip()
-        if fallback and fallback != settings.GROQ_MODEL:
-            models.append(fallback)
-        return models
+    def _dedupe(models: Sequence[str]) -> List[str]:
+        result: List[str] = []
+        for model in models:
+            model = (model or "").strip()
+            if model and model not in result:
+                result.append(model)
+        return result
 
-    @staticmethod
-    def _light_models() -> List[str]:
-        """Для простых задач (перевод): сначала лёгкая модель, тяжёлая как запасная."""
-        fallback = settings.GROQ_MODEL_FALLBACK.strip()
-        if fallback and fallback != settings.GROQ_MODEL:
-            return [fallback, settings.GROQ_MODEL]
-        return [settings.GROQ_MODEL]
+    @classmethod
+    def _models(cls) -> List[str]:
+        """Основная модель, затем запасная (если задана и отличается)."""
+        return cls._dedupe([settings.GROQ_MODEL, settings.GROQ_MODEL_FALLBACK])
+
+    @classmethod
+    def _light_models(cls) -> List[str]:
+        """Для простых задач (перевод): лёгкая модель, затем основная и запасная."""
+        return cls._dedupe([settings.GROQ_MODEL_LIGHT, settings.GROQ_MODEL, settings.GROQ_MODEL_FALLBACK])
 
     # ─── Multi-key rotation + запасная модель ────────────────────────────────
 
@@ -438,7 +440,7 @@ class GroqClient:
     # ─── TTS ─────────────────────────────────────────────────────────────────
 
     async def text_to_speech(self, text: str, voice: str) -> Optional[bytes]:
-        if not settings.ENABLE_TTS:
+        if not await runtime_settings.tts_enabled():
             return None
 
         async def _tts(client, model):

@@ -127,7 +127,7 @@ async def world(monkeypatch):
     try:
         for path in MIGRATIONS:
             await conn.execute(path.read_text(encoding="utf-8"))
-        await conn.execute("TRUNCATE users, generation_events CASCADE")
+        await conn.execute("TRUNCATE users, generation_events, app_settings CASCADE")
     finally:
         await conn.close()
     await db.connect()
@@ -372,3 +372,26 @@ def test_generation_events_are_stored_and_aggregated(monkeypatch):
 
     run(scenario, monkeypatch)
 
+
+
+def test_admin_settings_persist_and_override_defaults(monkeypatch):
+    from src import runtime_settings
+
+    async def scenario(w):
+        runtime_settings.reset_cache()
+        assert await runtime_settings.stt_provider() == "auto"
+        await runtime_settings.set_value(runtime_settings.STT_PROVIDER_KEY, "groq", updated_by=1)
+        await runtime_settings.set_value(runtime_settings.TTS_ENABLED_KEY, "false", updated_by=1)
+        assert await runtime_settings.stt_provider() == "groq"  # сразу, из кэша
+
+        runtime_settings.reset_cache()  # как после рестарта: читается из БД
+        assert await runtime_settings.stt_provider() == "groq"
+        assert await runtime_settings.tts_enabled() is False
+        assert (await db.get_app_settings())[runtime_settings.STT_PROVIDER_KEY] == "groq"
+
+        await runtime_settings.set_value(runtime_settings.STT_PROVIDER_KEY, "google")  # перезапись
+        runtime_settings.reset_cache()
+        assert await runtime_settings.stt_provider() == "google"
+        runtime_settings.reset_cache()
+
+    run(scenario, monkeypatch)

@@ -1,12 +1,20 @@
 import html
 
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 
 from src.config import ADMIN_IDS
 from src.db import db
-from src.keyboards import get_admin_panel_keyboard, get_admin_back_keyboard, get_admin_users_keyboard
+from src import runtime_settings
+from src.config import settings
+from src.keyboards import (
+    get_admin_back_keyboard,
+    get_admin_panel_keyboard,
+    get_admin_settings_keyboard,
+    get_admin_users_keyboard,
+)
 
 router = Router()
 
@@ -85,6 +93,69 @@ async def cq_admin_sessions(callback: CallbackQuery):
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_back_keyboard())
     await callback.answer()
+
+
+async def _render_settings(callback: CallbackQuery) -> None:
+    stt_mode = await runtime_settings.stt_provider()
+    tts_on = await runtime_settings.tts_enabled()
+    descriptions = {
+        "auto": "Google first, Whisper if Google fails",
+        "google": "Google only, no fallback (recordings over a minute still go to Whisper)",
+        "groq": "Whisper only",
+    }
+    text = (
+        "⚙️ <b>Settings</b>\n\n"
+        f"Speech recognition: <b>{html.escape(stt_mode)}</b> ({html.escape(descriptions[stt_mode])})\n"
+        f"Voice replies (TTS): <b>{'on' if tts_on else 'off'}</b>\n\n"
+        "Models (from environment, change in Render):\n"
+        f"  chat: {html.escape(settings.GROQ_MODEL)}\n"
+        f"  fallback: {html.escape(settings.GROQ_MODEL_FALLBACK or '—')}\n"
+        f"  translate: {html.escape(settings.GROQ_MODEL_LIGHT)}\n"
+        f"  Whisper: {html.escape(settings.GROQ_STT_MODEL)}\n"
+        f"  TTS: {html.escape(settings.GROQ_TTS_MODEL)}\n\n"
+        "Changes apply within seconds, no restart."
+    )
+    try:
+        await callback.message.edit_text(
+            text, parse_mode="HTML", reply_markup=get_admin_settings_keyboard(stt_mode, tts_on)
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):  # повторное нажатие на уже выбранный режим
+            raise
+
+
+@router.callback_query(F.data == "admin_settings")
+async def cq_admin_settings(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    await _render_settings(callback)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_set_stt_"))
+async def cq_admin_set_stt(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    mode = callback.data.removeprefix("admin_set_stt_")
+    if mode not in runtime_settings.STT_PROVIDERS:
+        await callback.answer("Unknown mode.", show_alert=True)
+        return
+    await runtime_settings.set_value(runtime_settings.STT_PROVIDER_KEY, mode, callback.from_user.id)
+    await _render_settings(callback)
+    await callback.answer("Saved")
+
+
+@router.callback_query(F.data.startswith("admin_set_tts_"))
+async def cq_admin_set_tts(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    value = "true" if callback.data.removeprefix("admin_set_tts_") == "on" else "false"
+    await runtime_settings.set_value(runtime_settings.TTS_ENABLED_KEY, value, callback.from_user.id)
+    await _render_settings(callback)
+    await callback.answer("Saved")
 
 
 @router.callback_query(F.data == "admin_generation")
