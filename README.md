@@ -28,7 +28,7 @@ Telegram-бот: каждый день один разговор с учител
 
 - Python / [aiogram](https://docs.aiogram.dev/) 3, long polling
 - Postgres ([Supabase](https://supabase.com) в проде, Docker локально) через `asyncpg`, без ORM
-- Groq API (`openai/gpt-oss-20b`, запасная `gpt-oss-120b`) для ответов и Summary, распознавание речи: Google (бесплатно) и/или Whisper `whisper-large-v3-turbo` на Groq, `canopylabs/orpheus-v1-english` для TTS
+- Groq API (`openai/gpt-oss-20b`) для ответов и Summary, распознавание речи: Google (бесплатно) и/или Whisper `whisper-large-v3-turbo` на Groq, `canopylabs/orpheus-v1-english` для TTS
 
 ## Структура
 
@@ -133,7 +133,7 @@ Long polling. Free Web Service засыпает после 15 минут без 
 | `ADMIN_IDS` | нет | пусто | Telegram id админов через запятую |
 | `PORT` | нет | `10000` | порт `/health` (на Render задаётся автоматически) |
 | `GROQ_MODEL` | нет | `openai/gpt-oss-20b` | основная модель |
-| `GROQ_MODEL_FALLBACK` | нет | `openai/gpt-oss-120b` | запасная модель (пусто = без запасной) |
+| `GROQ_MODEL_FALLBACK` | нет | пусто | запасная модель (пусто = без запасной, бот работает только на `GROQ_MODEL`) |
 | `GROQ_MODEL_LIGHT` | нет | `openai/gpt-oss-20b` | лёгкая модель (перевод) |
 | `GROQ_REASONING_EFFORT` | нет | `low` | глубина рассуждения gpt-oss (`low`/`medium`/`high`); пусто для моделей не из семейства gpt-oss |
 | `GROQ_STT_MODEL` | нет | `whisper-large-v3-turbo` | Whisper на Groq |
@@ -152,9 +152,11 @@ Long polling. Free Web Service засыпает после 15 минут без 
 По умолчанию стоят дешёвые модели (бот пока бесплатный):
 
 - `GROQ_MODEL` (по умолчанию `openai/gpt-oss-20b`): ответы МС и Summary;
-- `GROQ_MODEL_FALLBACK` (`openai/gpt-oss-120b`): запасная, более тяжёлая
-  модель, на неё бот переходит, когда основная не отвечает. Пусто = без
-  запасной;
+- `GROQ_MODEL_FALLBACK` (по умолчанию пусто): запасная модель, на неё бот
+  переходит, когда основная не отвечает. Пусто = без запасной, бот работает
+  только на `gpt-oss-20b` (по умолчанию: `gpt-oss-120b` на практике хуже
+  справляется с рассуждением и JSON). Если понадобится, задайте например
+  `openai/gpt-oss-120b`;
 - `GROQ_MODEL_LIGHT` (`openai/gpt-oss-20b`): простые задачи, перевод;
 - `GROQ_STT_MODEL` (`whisper-large-v3-turbo`), `GROQ_TTS_MODEL`:
   Whisper на Groq и озвучка;
@@ -164,10 +166,10 @@ Long polling. Free Web Service засыпает после 15 минут без 
 Как сменить модель: поменять переменную в Render (Environment) и
 перезапустить сервис. Что проверить после смены: в админке
 **⚠️ Generation (24h)** не растут `bad_json` и `error`, `fallback_used`
-редкий; пара живых сессий звучит нормально. Чтобы сделать запасную
-`gpt-oss-120b` основной (если 20b не справляется с качеством реплик),
-поменяйте местами `GROQ_MODEL` и `GROQ_MODEL_FALLBACK`. Решение
-принимать по данным из этого блока, а не заранее.
+редкий (без запасной модели его не будет совсем); пара живых сессий звучит
+нормально. Если 20b не справляется с качеством реплик, укажите другую
+модель в `GROQ_MODEL`. Решение принимать по данным из этого блока, а не
+заранее.
 
 Объём контекста тоже настраивается: `CONTEXT_MESSAGES` (по умолчанию 24,
 то есть вся сессия) и `SS4T_CONTEXT` (3). Для оценки: к последнему ходу

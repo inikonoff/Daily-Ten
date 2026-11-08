@@ -11,9 +11,10 @@ class Settings(BaseSettings):
     PORT: int = 10000
 
     # Модели Groq (смена модели = смена переменной окружения, без правки кода)
-    # По умолчанию дешёвые модели (экономия, пока бот бесплатный); тяжёлая 120b — запасная.
+    # По умолчанию только дешёвая gpt-oss-20b (экономия, пока бот бесплатный). Запасной
+    # модели нет: 120b на практике хуже справляется с рассуждением и JSON.
     GROQ_MODEL: str = "openai/gpt-oss-20b"
-    GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-120b"  # пусто = без запасной модели
+    GROQ_MODEL_FALLBACK: str = ""                     # пусто = без запасной модели
     GROQ_MODEL_LIGHT: str = "openai/gpt-oss-20b"      # простые задачи (перевод)
     GROQ_TTS_MODEL: str = "canopylabs/orpheus-v1-english"
     GROQ_STT_MODEL: str = "whisper-large-v3-turbo"

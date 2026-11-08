@@ -16,10 +16,10 @@ def clean_cache():
 
 def test_defaults_are_cheap_models_and_auto_stt():
     assert settings.GROQ_MODEL == "openai/gpt-oss-20b"
-    assert settings.GROQ_MODEL_FALLBACK == "openai/gpt-oss-120b"
+    assert settings.GROQ_MODEL_FALLBACK == ""  # запасной модели нет, только 20b
     assert settings.GROQ_STT_MODEL == "whisper-large-v3-turbo"
-    assert GroqClient._models() == ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
-    assert GroqClient._light_models() == ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
+    assert GroqClient._models() == ["openai/gpt-oss-20b"]
+    assert GroqClient._light_models() == ["openai/gpt-oss-20b"]
     assert asyncio.run(runtime_settings.stt_provider()) == "auto"
     assert asyncio.run(runtime_settings.tts_enabled()) is True
 
