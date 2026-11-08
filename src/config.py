@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     GROQ_API_KEYS: str = ""
     DATABASE_URL: str
+    ADMIN_IDS: str = ""  # Telegram user id админов через запятую
     PORT: int = 10000
 
     # Модели Groq (смена модели = смена переменной окружения, без правки кода)
@@ -36,10 +37,12 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-def get_admin_ids() -> List[int]:
-    import os
-    raw = os.environ.get("ADMIN_IDS", "")
+def parse_admin_ids(raw: str) -> List[int]:
     return [int(x.strip()) for x in raw.split(",") if x.strip().isdigit()]
+
+
+def get_admin_ids() -> List[int]:
+    return parse_admin_ids(settings.ADMIN_IDS)
 
 
 ADMIN_IDS = get_admin_ids()

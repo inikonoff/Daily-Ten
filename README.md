@@ -51,12 +51,7 @@ src/
 └── admin.py         # админ-панель
 tests/                 # pytest (см. раздел «Тесты»)
 migrations/
-├── 001_init.sql
-├── 002_sessions.sql
-├── 003_rls.sql
-├── 004_early_finish.sql
-├── 005_generation_events.sql
-└── 006_app_settings.sql
+└── 001_init.sql          # вся актуальная схема БД
 ```
 
 ## Локальный запуск
@@ -67,11 +62,9 @@ migrations/
      -p 5432:5432 postgres:16
    createdb -h localhost -U postgres daily_ten   # или через psql
    ```
-2. Применить миграции по порядку (002 идемпотентна):
+2. Применить схему (скрипт идемпотентен, повторный запуск безвреден):
    ```bash
-   for f in migrations/*.sql; do
-     psql "postgresql://postgres:postgres@localhost:5432/daily_ten" -f "$f"
-   done
+   psql "postgresql://postgres:postgres@localhost:5432/daily_ten" -f migrations/001_init.sql
    ```
 3. `.env` из `.env.example` — заполнить `TELEGRAM_BOT_TOKEN`, `GROQ_API_KEYS`, `DATABASE_URL` (строка выше), `ADMIN_IDS`.
 4. ```bash
@@ -107,14 +100,39 @@ Long polling. Free Web Service засыпает после 15 минут без 
    `db.<ref>.supabase.co` на Render free не подходит (только IPv6).
    Transaction pooler (порт 6543) тоже работает: `db.py` сам отключает кэш
    prepared statements.
-3. Применить миграции к Supabase с вашей машины:
-   `for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done`
-   (или вставить файлы по очереди в **SQL Editor**).
+3. Применить схему к Supabase с вашей машины:
+   `psql "$DATABASE_URL" -f migrations/001_init.sql`
+   (или вставить содержимое файла в **SQL Editor**).
 4. Данные видны в **Table Editor**: `users`, `sessions`, `messages`,
    `error_logs`. Бот ходит в Postgres напрямую, `supabase-py` не нужен.
-   Миграция `003_rls.sql` включает RLS без политик: иначе таблицы
+   Схема включает RLS без политик: иначе таблицы
    public были бы читаемы через REST-ключ anon. Боту это не мешает:
    подключение идёт ролью `postgres`, она обходит RLS.
+
+## Переменные окружения
+
+Полный список с комментариями лежит в [`.env.example`](.env.example).
+Бот подключается к Postgres напрямую, поэтому для базы нужна **одна**
+переменная, `DATABASE_URL`. Переменные `SUPABASE_URL` и `SUPABASE_KEY`
+не используются.
+
+| Переменная | Обязательна | По умолчанию | Назначение |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | да | | токен бота от @BotFather |
+| `GROQ_API_KEYS` | да | | ключи Groq через запятую, ротация при лимитах |
+| `DATABASE_URL` | да | | строка подключения к Postgres (локально или Supabase Session pooler) |
+| `ADMIN_IDS` | нет | пусто | Telegram id админов через запятую |
+| `PORT` | нет | `10000` | порт `/health` (на Render задаётся автоматически) |
+| `GROQ_MODEL` | нет | `openai/gpt-oss-20b` | основная модель |
+| `GROQ_MODEL_FALLBACK` | нет | `openai/gpt-oss-120b` | запасная модель (пусто = без запасной) |
+| `GROQ_MODEL_LIGHT` | нет | `openai/gpt-oss-20b` | лёгкая модель (перевод) |
+| `GROQ_STT_MODEL` | нет | `whisper-large-v3-turbo` | Whisper на Groq |
+| `GROQ_TTS_MODEL` | нет | `canopylabs/orpheus-v1-english` | озвучка |
+| `STT_PROVIDER` | нет | `auto` | режим распознавания по умолчанию: `auto`, `google`, `groq` (переключается в админке) |
+| `ENABLE_TTS` | нет | `true` | голосовые ответы по умолчанию (переключается в админке) |
+| `CONTEXT_MESSAGES` | нет | `24` | сообщений сессии в промпте |
+| `SS4T_CONTEXT` | нет | `3` | последних заметок учителя в промпте |
+| `TEST_DATABASE_URL` | только тесты | | отдельная БД с `test` в имени для сценарных тестов |
 
 ## Модели Groq и их смена
 
@@ -151,7 +169,7 @@ Long polling. Free Web Service засыпает после 15 минут без 
 
 `/admin → ⚙️ Settings` (только `ADMIN_IDS`), изменения вступают в силу
 за секунды, без рестарта. Значения хранятся в таблице `app_settings`
-(миграция 006), значения из окружения служат значениями по умолчанию.
+(создаётся в `001_init.sql`), значения из окружения служат значениями по умолчанию.
 
 **Режим распознавания голосовых:**
 
@@ -181,7 +199,7 @@ Whisper. Там же переключатель озвучки (Voice replies ON
 ### Мониторинг генерации
 
 Каждое значимое событие LLM-слоя пишется в таблицу `generation_events`
-(миграция 005) и агрегируется в админке, блок **⚠️ Generation (24h)**:
+(создаётся в `001_init.sql`) и агрегируется в админке, блок **⚠️ Generation (24h)**:
 
 | event | что значит |
 |---|---|
@@ -225,6 +243,8 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/daily_ten_test \
 
 ## Миграции
 
-Новая миграция — следующий номер в `migrations/` (`003_...sql`),
-применяется той же командой `psql "$DATABASE_URL" -f migrations/00N_*.sql`
-и локально, и на Supabase. `001_init.sql` не правим.
+Вся актуальная схема лежит в одном файле `migrations/001_init.sql`
+(до первого деплоя история правок свёрнута). Дальнейшие изменения схемы
+добавляйте отдельными файлами `002_*.sql`, `003_*.sql`, применяйте той же
+командой `psql "$DATABASE_URL" -f migrations/00N_*.sql` и локально, и на
+Supabase. Уже применённые файлы не правьте.

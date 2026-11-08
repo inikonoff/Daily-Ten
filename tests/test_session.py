@@ -46,3 +46,11 @@ def test_shorten_reply_keeps_first_and_last_sentence():
 def test_shorten_reply_leaves_two_sentences_alone():
     text = "A long first sentence " + "word " * 80 + ". And the closing one."
     assert shorten_reply(text, 10) == text.strip()
+
+
+def test_admin_ids_are_parsed_from_a_comma_separated_string():
+    from src.config import parse_admin_ids
+
+    assert parse_admin_ids("123, 456 ,789") == [123, 456, 789]
+    assert parse_admin_ids("") == []
+    assert parse_admin_ids("abc, 12, , -5") == [12]  # нечисловое и отрицательное пропускаются
