@@ -8,9 +8,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from src.config import settings
+from src.config import ADMIN_IDS, settings
 from src.db import db
 from src import handlers, admin, metrics
+from src.bot_menu import setup_bot_menu
 from src.background import background_loop
 from src.health_server import start_health_server
 
@@ -40,6 +41,7 @@ async def main() -> None:
     validate_settings()
     await db.connect()
     runner = await start_health_server()
+    await setup_bot_menu(bot, ADMIN_IDS)
     background = asyncio.create_task(background_loop(bot))
     try:
         logger.info("🚀 Starting polling...")
