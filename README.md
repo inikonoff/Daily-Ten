@@ -135,6 +135,7 @@ Long polling. Free Web Service засыпает после 15 минут без 
 | `GROQ_MODEL` | нет | `openai/gpt-oss-20b` | основная модель |
 | `GROQ_MODEL_FALLBACK` | нет | `openai/gpt-oss-120b` | запасная модель (пусто = без запасной) |
 | `GROQ_MODEL_LIGHT` | нет | `openai/gpt-oss-20b` | лёгкая модель (перевод) |
+| `GROQ_REASONING_EFFORT` | нет | `low` | глубина рассуждения gpt-oss (`low`/`medium`/`high`); пусто для моделей не из семейства gpt-oss |
 | `GROQ_STT_MODEL` | нет | `whisper-large-v3-turbo` | Whisper на Groq |
 | `GROQ_TTS_MODEL` | нет | `canopylabs/orpheus-v1-english` | озвучка |
 | `STT_PROVIDER` | нет | `auto` | режим распознавания по умолчанию: `auto`, `google`, `groq` (переключается в админке) |
@@ -221,6 +222,13 @@ Whisper. Там же переключатель озвучки (Voice replies ON
 | `short_voice` / `voice_dropped` | голосовой текст Summary слишком короткий / ушла только карточка |
 | `tts_ok` / `tts_fail` | озвучка (в админке видна доля успехов) |
 | `stt_ok` / `stt_fail` | распознавание речи; в колонке модели `google` или `whisper` |
+
+Ошибка `json_validate_failed` ... `max completion tokens reached before
+generating a valid document` значит, что у модели gpt-oss кончился лимит
+токенов раньше, чем она закончила JSON (скрытое рассуждение тоже тратит
+токены). Лимиты ответа заданы с запасом (`REPLY_MAX_TOKENS`,
+`SUMMARY_MAX_TOKENS` в `src/config.py`), а `GROQ_REASONING_EFFORT=low`
+сокращает рассуждение. Если ошибка повторяется, поднимите лимиты.
 
 Если Orpheus упирается в лимиты, проще всего выставить `ENABLE_TTS=false`.
 События старше 30 дней удаляет фоновая задача. Лимиты и список доступных моделей смотрите в

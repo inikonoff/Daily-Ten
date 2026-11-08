@@ -123,3 +123,25 @@ def test_short_voice_recovers_on_retry(no_sleep, events):
 
 def test_metrics_record_is_noop_without_database():
     metrics.record("test", "event", detail="x")  # не падает без пула и без цикла событий
+
+
+def test_requests_leave_room_for_reasoning_and_set_low_effort(no_sleep, events):
+    """gpt-oss тратит токены ответа на рассуждение: малый лимит давал 400 json_validate_failed."""
+    from src.config import REPLY_MAX_TOKENS, SUMMARY_MAX_TOKENS
+
+    fake = FakeClient(['{"category": "none", "counts_as_answer": true, "reply": "Tell me more."}'])
+    asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
+    request = fake.requests[0]
+    assert request["max_tokens"] == REPLY_MAX_TOKENS >= 1000
+    assert request["extra_body"] == {"include_reasoning": False, "reasoning_effort": "low"}
+
+    fake = FakeClient([GOOD_SUMMARY])
+    asyncio.run(_client(fake).generate_session_summary(**_summary_kwargs()))
+    assert fake.requests[0]["max_tokens"] == SUMMARY_MAX_TOKENS >= 3000
+
+
+def test_reasoning_effort_can_be_disabled_for_non_reasoning_models(monkeypatch):
+    from src.config import settings
+
+    monkeypatch.setattr(settings, "GROQ_REASONING_EFFORT", "")
+    assert GroqClient._extra_body() == {"include_reasoning": False}

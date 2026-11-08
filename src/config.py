@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     GROQ_MODEL_LIGHT: str = "openai/gpt-oss-20b"      # простые задачи (перевод)
     GROQ_TTS_MODEL: str = "canopylabs/orpheus-v1-english"
     GROQ_STT_MODEL: str = "whisper-large-v3-turbo"
+    # Глубина «рассуждения» моделей gpt-oss: low, medium, high. Рассуждение тратит
+    # токены ответа, поэтому по умолчанию low. Пусто = параметр не передаётся
+    # (нужно, если GROQ_MODEL не из семейства gpt-oss).
+    GROQ_REASONING_EFFORT: str = "low"
     # Значения по умолчанию для настроек, которые админ переключает в боте (/admin → Settings):
     ENABLE_TTS: bool = True   # false: голосовые ответы и озвучка Summary отключены, везде текст
     STT_PROVIDER: str = "auto"  # auto = сначала Google, при неудаче Whisper; google; groq
@@ -72,6 +76,13 @@ REPLY_WORD_LIMIT = 55            # лимит слов реплики МС (оз
 REPLY_WORD_TOLERANCE = 1.2       # до 55*1.2 слов принимаем как есть, дальше сокращаем
 MAX_USER_MESSAGE_CHARS = 1500    # длиннее — в промпт идёт обрезанный текст
 MIN_SUMMARY_VOICE_WORDS = 40     # короче — голосовое SS считается обрывом (Groq-баг)
+
+# Лимиты токенов ответа. У gpt-oss в них входит и скрытое рассуждение, поэтому
+# запас большой: при малом лимите Groq отвечает 400 json_validate_failed
+# («max completion tokens reached before generating a valid document»).
+REPLY_MAX_TOKENS = 1500
+SUMMARY_MAX_TOKENS = 4000
+TRANSLATE_MAX_TOKENS = 1000
 
 # ─── Распознавание речи ─────────────────────────────────────────────────────
 GOOGLE_STT_MAX_SECONDS = 55      # дольше Google не принимает: такие голосовые идут в Whisper

@@ -11,8 +11,11 @@ from src import metrics, runtime_settings
 from src.config import (
     CONTEXT_MESSAGES,
     MIN_SUMMARY_VOICE_WORDS,
+    REPLY_MAX_TOKENS,
     REPLY_WORD_LIMIT,
     REPLY_WORD_TOLERANCE,
+    SUMMARY_MAX_TOKENS,
+    TRANSLATE_MAX_TOKENS,
     settings,
 )
 from src.prompt import (
@@ -94,6 +97,17 @@ class GroqClient:
             logger.warning(f"⚠️ {label}: empty after stripping reasoning, raw={(raw or '')[:RAW_LOG_CHARS]!r}")
             raise ValueError(f"Empty response after stripping reasoning ({label})")
         return text
+
+    # ─── Параметры запроса ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _extra_body() -> Dict[str, Any]:
+        """Скрыть рассуждение в ответе и ограничить его глубину (оно тратит токены ответа)."""
+        extra: Dict[str, Any] = {"include_reasoning": False}
+        effort = settings.GROQ_REASONING_EFFORT.strip().lower()
+        if effort:
+            extra["reasoning_effort"] = effort
+        return extra
 
     # ─── Модели ──────────────────────────────────────────────────────────────
 
@@ -189,7 +203,7 @@ class GroqClient:
             msgs = messages if index == 0 else self._with_correction(messages, last_error)
             response = await client.chat.completions.create(
                 model=model,
-                extra_body={"include_reasoning": False},
+                extra_body=self._extra_body(),
                 messages=msgs,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -263,7 +277,7 @@ class GroqClient:
         async def _chat(client, model):
             return await self._chat_json(
                 client, model, messages,
-                max_tokens=500, label="generate_reply", temps=(0.7, 0.0), validate=_validate,
+                max_tokens=REPLY_MAX_TOKENS, label="generate_reply", temps=(0.7, 0.0), validate=_validate,
             )
 
         try:
@@ -354,7 +368,7 @@ class GroqClient:
                 return await self._chat_json(
                     client, model,
                     [{"role": "system", "content": prompt}, {"role": "user", "content": user_content}],
-                    max_tokens=2500, label="summary", temps=temps, validate=_validate,
+                    max_tokens=SUMMARY_MAX_TOKENS, label="summary", temps=temps, validate=_validate,
                 )
 
             return await self._make_request(
@@ -393,7 +407,7 @@ class GroqClient:
         async def _translate(client, model):
             response = await client.chat.completions.create(
                 model=model,
-                extra_body={"include_reasoning": False},
+                extra_body=self._extra_body(),
                 messages=[
                     {
                         "role": "system",
@@ -406,7 +420,7 @@ class GroqClient:
                     {"role": "user", "content": text},
                 ],
                 temperature=0.2,
-                max_tokens=400,
+                max_tokens=TRANSLATE_MAX_TOKENS,
             )
             return self._extract_text(response, "translate_text")
 
