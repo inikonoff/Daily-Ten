@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # токены ответа, поэтому по умолчанию low. Пусто = параметр не передаётся
     # (нужно, если GROQ_MODEL не из семейства gpt-oss).
     GROQ_REASONING_EFFORT: str = "low"
+    # Серверная проверка JSON у Groq (response_format=json_object). С моделями-рассуждателями
+    # она нестабильна и сама отвечает 400 json_validate_failed, поэтому по умолчанию выключена:
+    # JSON просим в промпте, а достаём и проверяем сами (parse_json_robust + повтор).
+    GROQ_JSON_MODE: bool = False
     # Значения по умолчанию для настроек, которые админ переключает в боте (/admin → Settings):
     ENABLE_TTS: bool = True   # false: голосовые ответы и озвучка Summary отключены, везде текст
     STT_PROVIDER: str = "auto"  # auto = сначала Google, при неудаче Whisper; google; groq

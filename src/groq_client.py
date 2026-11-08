@@ -201,14 +201,16 @@ class GroqClient:
         prompt_chars = sum(len(m["content"]) for m in messages)
         for index, temperature in enumerate(temps):
             msgs = messages if index == 0 else self._with_correction(messages, last_error)
-            response = await client.chat.completions.create(
+            request: Dict[str, Any] = dict(
                 model=model,
                 extra_body=self._extra_body(),
                 messages=msgs,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                response_format={"type": "json_object"},
             )
+            if settings.GROQ_JSON_MODE:
+                request["response_format"] = {"type": "json_object"}
+            response = await client.chat.completions.create(**request)
             raw = response.choices[0].message.content
             try:
                 data = parse_json_robust(raw)

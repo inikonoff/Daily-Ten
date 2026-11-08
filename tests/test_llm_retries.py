@@ -145,3 +145,26 @@ def test_reasoning_effort_can_be_disabled_for_non_reasoning_models(monkeypatch):
 
     monkeypatch.setattr(settings, "GROQ_REASONING_EFFORT", "")
     assert GroqClient._extra_body() == {"include_reasoning": False}
+
+
+def test_server_side_json_mode_is_off_by_default(no_sleep, events):
+    """response_format=json_object у Groq с gpt-oss давал 400 json_validate_failed."""
+    fake = FakeClient(['{"category": "none", "counts_as_answer": true, "reply": "Tell me more."}'])
+    asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
+    assert "response_format" not in fake.requests[0]
+
+
+def test_json_mode_can_be_enabled(no_sleep, events, monkeypatch):
+    from src.config import settings
+
+    monkeypatch.setattr(settings, "GROQ_JSON_MODE", True)
+    fake = FakeClient(['{"category": "none", "counts_as_answer": true, "reply": "Tell me more."}'])
+    asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
+    assert fake.requests[0]["response_format"] == {"type": "json_object"}
+
+
+def test_prose_and_fenced_replies_are_still_parsed_without_json_mode(no_sleep, events):
+    answer = 'Sure! ```json\n{"category": "none", "counts_as_answer": true, "reply": "Tell me more."}\n```'
+    fake = FakeClient([answer])
+    result = asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
+    assert result["reply"] == "Tell me more."

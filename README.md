@@ -136,6 +136,7 @@ Long polling. Free Web Service засыпает после 15 минут без 
 | `GROQ_MODEL_FALLBACK` | нет | пусто | запасная модель (пусто = без запасной, бот работает только на `GROQ_MODEL`) |
 | `GROQ_MODEL_LIGHT` | нет | `openai/gpt-oss-20b` | лёгкая модель (перевод) |
 | `GROQ_REASONING_EFFORT` | нет | `low` | глубина рассуждения gpt-oss (`low`/`medium`/`high`); пусто для моделей не из семейства gpt-oss |
+| `GROQ_JSON_MODE` | нет | `false` | серверная проверка JSON у Groq (`response_format`); выключена, потому что с gpt-oss даёт `json_validate_failed` |
 | `GROQ_STT_MODEL` | нет | `whisper-large-v3-turbo` | Whisper на Groq |
 | `GROQ_TTS_MODEL` | нет | `canopylabs/orpheus-v1-english` | озвучка |
 | `STT_PROVIDER` | нет | `auto` | режим распознавания по умолчанию: `auto`, `google`, `groq` (переключается в админке) |
@@ -230,7 +231,13 @@ generating a valid document` значит, что у модели gpt-oss кон
 токенов раньше, чем она закончила JSON (скрытое рассуждение тоже тратит
 токены). Лимиты ответа заданы с запасом (`REPLY_MAX_TOKENS`,
 `SUMMARY_MAX_TOKENS` в `src/config.py`), а `GROQ_REASONING_EFFORT=low`
-сокращает рассуждение. Если ошибка повторяется, поднимите лимиты.
+сокращает рассуждение (для gpt-oss допустимы только `low`, `medium`,
+`high`; полностью отключить рассуждение нельзя). Серверная проверка JSON
+у Groq (`GROQ_JSON_MODE`) выключена: она с моделями-рассуждателями
+нестабильна и сама отвечает 400 `json_validate_failed`; JSON бот достаёт и
+проверяет сам, а при неудаче повторяет запрос с `temperature=0`. Если
+ошибка повторяется, поднимите лимиты или смените модель на не-рассуждатель
+в `GROQ_MODEL` (тогда оставьте `GROQ_REASONING_EFFORT` пустым).
 
 Если Orpheus упирается в лимиты, проще всего выставить `ENABLE_TTS=false`.
 События старше 30 дней удаляет фоновая задача. Лимиты и список доступных моделей смотрите в
