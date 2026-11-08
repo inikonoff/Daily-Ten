@@ -32,20 +32,32 @@ DESCRIPTION = (
 )
 
 
-async def setup_bot_menu(bot: Bot, admin_ids: Iterable[int]) -> None:
+async def _step(name: str, call) -> bool:
+    """Каждый шаг независим: сбой одного (например, меню) не отменяет остальные (описание)."""
     try:
-        await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
-        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-        await bot.set_my_short_description(short_description=SHORT_DESCRIPTION)
-        await bot.set_my_description(description=DESCRIPTION)
+        await call
+        return True
     except Exception as e:
-        logger.warning(f"⚠️ Не удалось зарегистрировать меню бота: {e}")
-        return
+        logger.warning(f"⚠️ Не удалось выполнить «{name}»: {e}")
+        return False
 
+
+async def setup_bot_menu(bot: Bot, admin_ids: Iterable[int]) -> None:
+    results = {
+        "команды": await _step("команды", bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())),
+        "кнопка меню": await _step("кнопка меню", bot.set_chat_menu_button(menu_button=MenuButtonCommands())),
+        "короткое описание": await _step(
+            "короткое описание", bot.set_my_short_description(short_description=SHORT_DESCRIPTION)
+        ),
+        "описание": await _step("описание", bot.set_my_description(description=DESCRIPTION)),
+    }
     for admin_id in admin_ids:
-        try:
-            # Отдельный список с /admin только в личном чате этого админа.
-            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
-        except Exception as e:  # например, админ ещё не писал боту: чата нет
-            logger.warning(f"⚠️ Не удалось задать админское меню для {admin_id}: {e}")
-    logger.info("✅ Bot menu registered")
+        # Отдельный список с /admin только в личном чате этого админа
+        # (не сработает, если админ ещё не писал боту: чата нет).
+        results[f"админ {admin_id}"] = await _step(
+            f"админское меню {admin_id}",
+            bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id)),
+        )
+    done = [name for name, ok in results.items() if ok]
+    failed = [name for name, ok in results.items() if not ok]
+    logger.info(f"✅ Bot menu: выполнено {done}" + (f", НЕ выполнено {failed}" if failed else ""))

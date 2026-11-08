@@ -6,9 +6,10 @@ from src.bot_menu import ADMIN_COMMANDS, USER_COMMANDS, setup_bot_menu
 
 
 class FakeBot:
-    def __init__(self, fail_for_chat=None, fail_all=False):
+    def __init__(self, fail_for_chat=None, fail_all=False, fail_menu_button=False):
         self.commands, self.calls = [], []
         self.fail_for_chat, self.fail_all = fail_for_chat, fail_all
+        self.fail_menu_button = fail_menu_button
 
     async def set_my_commands(self, commands, scope=None):
         if self.fail_all:
@@ -18,6 +19,8 @@ class FakeBot:
         self.commands.append((scope, [c.command for c in commands]))
 
     async def set_chat_menu_button(self, menu_button=None, **kw):
+        if self.fail_menu_button:
+            raise RuntimeError("menu button failed")
         assert isinstance(menu_button, MenuButtonCommands)
         self.calls.append("menu_button")
 
@@ -54,3 +57,10 @@ def test_command_descriptions_fit_telegram_limits():
     for command in ADMIN_COMMANDS:
         assert 1 <= len(command.description) <= 256 and command.command.islower()
     assert [c.command for c in ADMIN_COMMANDS[: len(USER_COMMANDS)]] == [c.command for c in USER_COMMANDS]
+
+
+def test_failed_menu_button_does_not_skip_the_descriptions():
+    bot = FakeBot(fail_menu_button=True)
+    asyncio.run(setup_bot_menu(bot, [111]))
+    assert "short" in bot.calls and "description" in bot.calls  # описание всё равно задано
+    assert any(isinstance(scope, BotCommandScopeChat) for scope, _ in bot.commands)
