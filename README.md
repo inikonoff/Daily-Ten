@@ -75,6 +75,14 @@ migrations/
 
 ## Деплой (Render, free Web Service + Supabase)
 
+**Версия Python закреплена файлом `.python-version` (3.12.8).** Без неё Render
+берёт свою новую версию по умолчанию (на момент написания 3.14), для которой у
+закреплённых в `requirements.txt` пакетов (`pydantic-core`, `asyncpg`,
+`aiohttp`) нет готовых сборок, и сборка падает на `pydantic-core`
+(`metadata-generation-failed`). Если файл не подхватился, задайте переменную
+`PYTHON_VERSION=3.12.8` в Environment сервиса. Команды: Build Command
+`pip install -r requirements.txt`, Start Command `python -m src.main`.
+
 Long polling. Free Web Service засыпает после 15 минут без входящего HTTP,
 а фоновая задача (закрытие брошенных сессий) должна жить, поэтому
 `health_server.py` подключён к `main.py` и нужен внешний пингер:
