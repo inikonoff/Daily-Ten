@@ -119,6 +119,7 @@ In every other case "counts_as_answer" is true.
   cause unnatural pauses in speech synthesis.
 
 # OUTPUT FORMAT — JSON ONLY, no markdown fences
+Write the JSON object directly as your message. Never call a function or a tool, and never wrap the JSON in {"name": ..., "arguments": ...}.
 {
   "category": "grammar|vocabulary|prepositions|structure|none",
   "mistake": "the exact phrase from the student's latest message that held the most significant mistake, or empty string if category is none",

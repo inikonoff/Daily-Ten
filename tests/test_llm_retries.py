@@ -67,7 +67,7 @@ def test_think_leak_and_bad_json_are_retried_at_temperature_zero(no_sleep, event
 
 
 def test_reply_returns_none_when_everything_fails(no_sleep, events):
-    fake = FakeClient(["garbage"])
+    fake = FakeClient(["{garbage"])  # битый JSON, не реплика: показывать юзеру нельзя
     assert asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs())) is None
     assert ("generate_reply", "error") in events
 
@@ -168,3 +168,80 @@ def test_prose_and_fenced_replies_are_still_parsed_without_json_mode(no_sleep, e
     fake = FakeClient([answer])
     result = asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
     assert result["reply"] == "Tell me more."
+
+
+# ─── Ответ из failed_generation и обычный текст вместо JSON ──────────────────
+
+def _bad_request(code, failed_generation):
+    """Исключение как от Groq: 400 с failed_generation в теле."""
+    import httpx
+    from openai import BadRequestError
+
+    request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    response = httpx.Response(400, request=request)
+    body = {"message": "failed", "type": "invalid_request_error", "code": code,
+            "failed_generation": failed_generation}
+    return BadRequestError("Error code: 400", response=response, body=body)
+
+
+class RaisingClient(FakeClient):
+    """Первые n вызовов падают исключением, дальше отвечает по очереди."""
+
+    def __init__(self, errors, answers=("{}",)):
+        super().__init__(answers)
+        self.errors = list(errors)
+
+    async def _create(self, **kwargs):
+        if self.errors:
+            self.requests.append(kwargs)
+            raise self.errors.pop(0)
+        return await super()._create(**kwargs)
+
+
+TOOL_WRAPPED = (
+    '{"name": "assistant", "arguments": {"category": "none", "mistake": "", "corrected": "", '
+    '"counts_as_answer": false, "reply": "Let us keep exploring the book. What scene stuck with you?"}}'
+)
+
+
+def test_reply_is_taken_from_failed_generation_of_a_tool_call(no_sleep, events):
+    fake = RaisingClient([_bad_request("tool_use_failed", TOOL_WRAPPED)])
+    result = asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
+    assert result["reply"].startswith("Let us keep exploring")
+    assert result["counts_as_answer"] is False
+    assert len(fake.requests) == 1  # без лишних повторов
+    assert ("generate_reply", "failed_generation_used") in events
+
+
+def test_empty_failed_generation_is_a_normal_api_error(no_sleep, events):
+    fake = RaisingClient([_bad_request("json_validate_failed", "")] * 20)
+    assert asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs())) is None
+    assert ("generate_reply", "error") in events
+
+
+def test_plain_text_answer_is_used_as_the_reply(no_sleep, events):
+    fake = FakeClient(["I hear you have had a long journey. Tell me what you noticed first."])
+    result = asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs()))
+    assert result["reply"] == "I hear you have had a long journey. Tell me what you noticed first."
+    assert result["counts_as_answer"] is True and result["category"] == "none"
+    assert ("generate_reply", "prose_fallback") in events
+
+
+def test_broken_json_is_not_shown_to_the_user_as_a_reply(no_sleep, events):
+    fake = FakeClient(['{"reply": "cut off here', "{broken"])
+    assert asyncio.run(_client(fake).generate_reply("hello", **_reply_kwargs())) is None
+
+
+def test_summary_never_falls_back_to_plain_text(no_sleep, events):
+    fake = FakeClient(["Here is a nice summary in plain words."])
+    assert asyncio.run(_client(fake).generate_session_summary(**_summary_kwargs())) is None
+
+
+def test_unwrap_tool_call_variants():
+    from src.groq_client import failed_generation_from, unwrap_tool_call
+
+    assert unwrap_tool_call({"name": "x", "arguments": {"reply": "hi"}}) == {"reply": "hi"}
+    assert unwrap_tool_call({"name": "x", "arguments": '{"reply": "hi"}'}) == {"reply": "hi"}
+    assert unwrap_tool_call({"reply": "hi", "name": "Anna"}) == {"reply": "hi", "name": "Anna"}  # не обёртка
+    assert failed_generation_from(_bad_request("x", "abc")) == "abc"
+    assert failed_generation_from(_bad_request("x", "  ")) is None

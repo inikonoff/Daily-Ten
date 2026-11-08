@@ -96,6 +96,7 @@ In every other case "counts_as_answer" is true.
   cause unnatural pauses in speech synthesis.
 
 # OUTPUT FORMAT — JSON ONLY, no markdown fences
+Write the JSON object directly as your message. Never call a function or a tool, and never wrap the JSON in {"name": ..., "arguments": ...}.
 {
   "category": "grammar|vocabulary|prepositions|structure|none",
   "mistake": "the exact phrase from the student's latest message that held the most significant mistake, or empty string if category is none",
@@ -253,7 +254,7 @@ Speak TO them, in second person, in your own warm and honest voice, not a grade 
 - "level_estimate": CEFR level, same as level_cefr.
 - "pick_up_next": 2-4 concrete things to pick up in the next session (a person, a story, an unfinished thread, a recurring mistake to listen for).
 
-Output JSON ONLY, no markdown fences:
+Output JSON ONLY, no markdown fences, as your plain message (never a function or tool call):
 {"user_summary": {...}, "teacher_summary": {...}}
 """
 

@@ -221,6 +221,8 @@ Whisper. Там же переключатель озвучки (Voice replies ON
 | `fallback_used` | ответ дала запасная модель |
 | `reply_shortened` | реплика длиннее лимита, код её сократил |
 | `non_answer` / `forced_answer` | модель сочла сообщение не-ответом / сработал потолок 2 подряд |
+| `failed_generation_used` | Groq отклонил ответ (400 `tool_use_failed` / `json_validate_failed`), но ответ модели нашёлся в `failed_generation` и использован |
+| `prose_fallback` | модель ответила обычным текстом вместо JSON, текст использован как реплика |
 | `lite_prompt` | Summary получилось только с упрощённого промпта |
 | `short_voice` / `voice_dropped` | голосовой текст Summary слишком короткий / ушла только карточка |
 | `tts_ok` / `tts_fail` | озвучка (в админке видна доля успехов) |

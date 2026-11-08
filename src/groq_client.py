@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
-from openai import AsyncOpenAI
+from openai import APIStatusError, AsyncOpenAI
 
 from src import metrics, runtime_settings
 from src.config import (
@@ -66,6 +66,52 @@ def parse_json_robust(text: Optional[str]) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("JSON is not an object")
     return data
+
+
+def unwrap_tool_call(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    gpt-oss иногда оформляет ответ как вызов функции {"name": "assistant",
+    "arguments": {...}}. Сам ответ при этом правильный, достаём его из arguments.
+    """
+    for _ in range(3):  # на случай двойной обёртки
+        if not (isinstance(data, dict) and "name" in data and "arguments" in data):
+            break
+        arguments = data["arguments"]
+        if isinstance(arguments, str):
+            arguments = parse_json_robust(arguments)
+        if not isinstance(arguments, dict):
+            raise ValueError("Tool call arguments are not an object")
+        data = arguments
+    return data
+
+
+def failed_generation_from(error: Exception) -> Optional[str]:
+    """
+    Groq отвечает 400 (tool_use_failed, json_validate_failed), но кладёт то, что
+    успела написать модель, в поле failed_generation. Достаём его из исключения.
+    """
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        text = body.get("failed_generation")
+        if not text and isinstance(body.get("error"), dict):
+            text = body["error"].get("failed_generation")
+        if isinstance(text, str) and text.strip():
+            return text
+    return None
+
+
+def prose_as_reply(raw: Optional[str], max_chars: int = 900) -> Optional[Dict[str, Any]]:
+    """
+    Последняя попытка, если модель ответила обычным текстом вместо JSON: берём
+    его как реплику (лучше живая реплика, чем «не расслышала»). Подходит только
+    короткий связный текст без следов JSON.
+    """
+    text = (strip_think(raw) or "").strip()
+    if not text or len(text) > max_chars:
+        return None
+    if text[0] in "{[`" or '"reply"' in text or '"category"' in text or "</think>" in text:
+        return None
+    return {"category": "none", "mistake": "", "corrected": "", "counts_as_answer": True, "reply": text}
 
 
 class GroqClient:
@@ -190,6 +236,7 @@ class GroqClient:
         label: str,
         temps: Sequence[float],
         validate: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+        prose_fallback: bool = False,
     ) -> Dict[str, Any]:
         """
         Один JSON-вызов с мягким разбором. При провале разбора или проверки
@@ -210,13 +257,26 @@ class GroqClient:
             )
             if settings.GROQ_JSON_MODE:
                 request["response_format"] = {"type": "json_object"}
-            response = await client.chat.completions.create(**request)
-            raw = response.choices[0].message.content
             try:
-                data = parse_json_robust(raw)
+                response = await client.chat.completions.create(**request)
+                raw = response.choices[0].message.content
+            except APIStatusError as e:
+                # 400 tool_use_failed / json_validate_failed: ответ модели лежит в failed_generation
+                raw = failed_generation_from(e)
+                if not raw:
+                    raise
+                metrics.record(label, "failed_generation_used", model=model, detail=str(getattr(e, "code", "")))
+            try:
+                data = unwrap_tool_call(parse_json_robust(raw))
                 return validate(data) if validate else data
             except ValueError as e:
                 last_error = e
+                if prose_fallback and index == len(temps) - 1:
+                    fallback = prose_as_reply(raw)
+                    if fallback is not None:
+                        metrics.record(label, "prose_fallback", model=model, raw=raw)
+                        logger.warning(f"⚠️ {label}: model answered with plain text, using it as the reply")
+                        return validate(fallback) if validate else fallback
                 metrics.record(label, "bad_json", model=model, detail=str(e),
                                prompt_chars=prompt_chars, raw=raw)
                 logger.warning(
@@ -280,6 +340,7 @@ class GroqClient:
             return await self._chat_json(
                 client, model, messages,
                 max_tokens=REPLY_MAX_TOKENS, label="generate_reply", temps=(0.7, 0.0), validate=_validate,
+                prose_fallback=True,
             )
 
         try:
