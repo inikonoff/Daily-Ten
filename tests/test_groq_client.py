@@ -115,3 +115,11 @@ def test_keys_rotate_between_attempts(no_sleep):
 def test_no_clients_raises():
     with pytest.raises(Exception):
         asyncio.run(GroqClient([])._make_request(lambda c, m: None))
+
+
+def test_summary_keeps_only_object_items_of_the_new_lists():
+    data = {"user_summary": {"best_moment": "b", "upgrades": [{"you_said": "good"}, "junk", 5],
+                             "idioms": "not a list"},
+            "teacher_summary": {}}
+    fixed = GroqClient._validate_summary(data)["user_summary"]
+    assert fixed["upgrades"] == [{"you_said": "good"}] and fixed["idioms"] == [] and fixed["vocabulary"] == []

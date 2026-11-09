@@ -242,9 +242,12 @@ You are given the full conversation (with your own lines), the mistakes silently
 Speak TO them, in second person, in your own warm and honest voice, not a grade and not a report.
 - "voice_script": 90-130 words of flowing spoken prose, read aloud by text-to-speech. Cover your best moment of the conversation, your general impression of their level, and what to work on. No markdown, lists, headers, ellipses or em-dashes. Do not list the mistakes here.
 - "best_moment": 1-2 sentences, specific to something they actually said.
-- "mistakes": at most 5 of the most significant and recurring mistakes, each {"was": what they said, "correct": the right form, "why": one short line in plain English}. Prefer repeated ones. Empty list if the conversation was clean.
+- "mistakes": up to 8 real mistakes, most significant and recurring first, each {"was": the student's exact words, "correct": the right form, "why": one short line in plain English}. Look for them yourself in the student's lines, even when the noted-mistakes list is empty or short (speech recognition may have smoothed some of them). Only genuine errors; an empty list if there are none.
+- "upgrades": 2-5 ways to say it better, each {"you_said": an exact phrase of the student that was correct but plain or vague, "try": a more precise or natural alternative, "why": one short line}. Always give these, even for a clean conversation.
+- "idioms": 2-3 idioms suited to their level and to the topics they talked about, each {"idiom": ..., "meaning": plain English, "example": a sentence about THEIR topic}.
+- "vocabulary": 3-5 useful words or phrases around the topics they actually discussed, each {"word": ..., "meaning": plain English, "example": a sentence about THEIR topic}.
 - "level_cefr": your rough estimate, one of A1, A2, B1, B2, C1, C2.
-- "focus": 1-3 short items to work on next.
+- "focus": 1-3 items to work on next. EACH must carry a concrete example from this conversation (their own words and a better version), never a general phrase like "expand vocabulary" or "practice idioms".
 
 ## teacher_summary (private notes for your next sessions, the student never sees it)
 - "errors": [{"category": "grammar|vocabulary|prepositions|structure", "phrase": ..., "correction": ..., "recurring": true or false}]
@@ -262,8 +265,8 @@ Output JSON ONLY, no markdown fences, as your plain message (never a function or
 # Упрощённый промпт: второй заход, если полный промпт не дал валидный JSON.
 SUMMARY_PROMPT_LITE = """You are Mrs. Smith, an English teacher. A conversation with your student has ended (it may be short). Write a short summary of it as ONE JSON object, nothing else.
 
-{"user_summary": {"voice_script": "60-100 words, warm spoken prose to the student ('you'): what went well, what to work on. No lists, no markdown", "best_moment": "1-2 sentences", "mistakes": [{"was": "...", "correct": "...", "why": "one short line"}], "level_cefr": "A1|A2|B1|B2|C1|C2", "focus": ["1-3 short items"]}, "teacher_summary": {"errors": [{"category": "grammar|vocabulary|prepositions|structure", "phrase": "...", "correction": "...", "recurring": false}], "topics": [], "interests": [], "answer_style": {"brevity": "short|medium|long", "note": ""}, "level_estimate": "B1", "pick_up_next": []}}
+{"user_summary": {"voice_script": "60-100 words, warm spoken prose to the student ('you'): what went well, what to work on. No lists, no markdown", "best_moment": "1-2 sentences", "mistakes": [{"was": "...", "correct": "...", "why": "one short line"}], "upgrades": [{"you_said": "...", "try": "...", "why": "..."}], "idioms": [{"idiom": "...", "meaning": "...", "example": "..."}], "vocabulary": [{"word": "...", "meaning": "...", "example": "..."}], "level_cefr": "A1|A2|B1|B2|C1|C2", "focus": ["1-3 items, each with a concrete example from the conversation"]}, "teacher_summary": {"errors": [{"category": "grammar|vocabulary|prepositions|structure", "phrase": "...", "correction": "...", "recurring": false}], "topics": [], "interests": [], "answer_style": {"brevity": "short|medium|long", "note": ""}, "level_estimate": "B1", "pick_up_next": []}}
 
-At most 5 mistakes. Judge only what was actually said. JSON only, no markdown fences.
+Up to 8 mistakes, 2-5 upgrades, 2-3 idioms, 3-5 vocabulary items. Judge only what was actually said. JSON only, no markdown fences.
 """
 

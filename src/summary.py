@@ -37,34 +37,74 @@ def needs_summary(session: Dict[str, Any]) -> bool:
     return session["completion_reason"] in ("finished", "early") or session["pairs_done"] >= 3
 
 
+# Сколько пунктов каждой секции показывает карточка в чате. Полные списки
+# остаются в user_summary (для подробного анализа, например в Mini App).
+CARD_MISTAKES = 3
+CARD_UPGRADES = 3
+CARD_IDIOMS = 2
+CARD_VOCABULARY = 4
+CARD_FOCUS = 3
+
+
 def render_card(user_summary: Dict[str, Any]) -> str:
-    """Текстовая карточка с разбором (HTML)."""
+    """Текстовая карточка с разбором (HTML). Секции, не поместившиеся в лимит Telegram, отбрасываются целиком."""
     esc = html.escape
-    lines = [f"📋 <b>{esc(DISPLAY_NAME)} — Session Summary</b>"]
+
+    def text(value: Any) -> str:
+        return esc(str(value or "").strip())
+
+    def items(key: str, limit: int) -> list:
+        return [i for i in (user_summary.get(key) or []) if isinstance(i, dict)][:limit]
+
+    sections = []  # каждая секция: список строк
 
     best = user_summary.get("best_moment")
     if best:
-        lines += ["", "⭐ <b>Best moment</b>", esc(str(best))]
+        sections.append(["⭐ <b>Best moment</b>", text(best)])
 
-    mistakes = user_summary.get("mistakes") or []
+    mistakes = items("mistakes", CARD_MISTAKES)
     if mistakes:
-        lines += ["", "✏️ <b>Worth a second look</b>"]
-        for m in mistakes[:5]:
-            lines.append(
-                f"• {esc(str(m.get('was', '')))} → <b>{esc(str(m.get('correct', '')))}</b>\n"
-                f"  <i>{esc(str(m.get('why', '')))}</i>"
-            )
+        sections.append(["✏️ <b>Worth a second look</b>"] + [
+            f"• {text(m.get('was'))} → <b>{text(m.get('correct'))}</b>\n  <i>{text(m.get('why'))}</i>"
+            for m in mistakes
+        ])
+
+    upgrades = items("upgrades", CARD_UPGRADES)
+    if upgrades:
+        sections.append(["💡 <b>Say it better</b>"] + [
+            f"• {text(u.get('you_said'))} → <b>{text(u.get('try'))}</b>\n  <i>{text(u.get('why'))}</i>"
+            for u in upgrades
+        ])
+
+    idioms = items("idioms", CARD_IDIOMS)
+    if idioms:
+        sections.append(["🧩 <b>Idioms to try</b>"] + [
+            f"• <b>{text(i.get('idiom'))}</b>: {text(i.get('meaning'))}\n  <i>{text(i.get('example'))}</i>"
+            for i in idioms
+        ])
+
+    vocabulary = items("vocabulary", CARD_VOCABULARY)
+    if vocabulary:
+        sections.append(["📚 <b>Words for your topics</b>"] + [
+            f"• <b>{text(v.get('word'))}</b>: {text(v.get('meaning'))}\n  <i>{text(v.get('example'))}</i>"
+            for v in vocabulary
+        ])
 
     level = user_summary.get("level_cefr")
     if level:
-        lines += ["", f"📈 <b>Level</b> (roughly): {esc(str(level))}"]
+        sections.append([f"📈 <b>Level</b> (roughly): {text(level)}"])
 
-    focus = user_summary.get("focus") or []
+    focus = [f for f in (user_summary.get("focus") or []) if f][:CARD_FOCUS]
     if focus:
-        lines += ["", "🎯 <b>Next time</b>"]
-        lines += [f"• {esc(str(f))}" for f in focus[:3]]
+        sections.append(["🎯 <b>Next time</b>"] + [f"• {text(f)}" for f in focus])
 
-    return "\n".join(lines)[:CARD_LIMIT]
+    header = f"📋 <b>{esc(DISPLAY_NAME)} — Session Summary</b>"
+    while sections:
+        card = "\n\n".join([header] + ["\n".join(section) for section in sections])
+        if len(card) <= CARD_LIMIT:
+            return card
+        sections.pop()  # не помещается: убираем последнюю секцию целиком, теги остаются закрытыми
+    return header
 
 
 async def generate_and_store(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:

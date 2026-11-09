@@ -385,6 +385,10 @@ class GroqClient:
             user["mistakes"] = []
         if not isinstance(user.get("focus"), list):
             user["focus"] = []
+        for key in ("upgrades", "idioms", "vocabulary"):
+            if not isinstance(user.get(key), list):
+                user[key] = []
+            user[key] = [item for item in user[key] if isinstance(item, dict)]
         if not isinstance(teacher.get("errors"), list):
             teacher["errors"] = []
         if not (user["voice_script"] or user.get("best_moment") or user["mistakes"] or user["focus"]):
